@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from config import Config
 from gowa import verify_signature
+from mcp import McpServer, new_session_id
 from service import Bridge
 
 log = logging.getLogger("bridge.http")
@@ -26,15 +27,23 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "GowaEspoBridge/1.0"
     bridge: Bridge  # injected by make_server
+    mcp: McpServer  # injected by make_server
 
     # -- helpers -----------------------------------------------------------
-    def _send(self, status: int, payload: dict) -> None:
+    def _send(self, status: int, payload, headers: dict | None = None) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_no_content(self, status: int) -> None:
+        self.send_response(status)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _read_body(self) -> bytes:
         try:
@@ -65,9 +74,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"stats": self.bridge.stats,
                                     "queue": self.bridge.store.pending_count(),
                                     "channels": list(self.bridge.cfg.newsletter_jids)})
+        if path == "/mcp":
+            # Streamable-HTTP servers that do not offer a GET/SSE stream must say so.
+            return self._send(405, {"error": "use POST /mcp"})
         if path == "/":
             return self._send(200, {"service": "gowa-espocrm-bridge",
-                                    "endpoints": ["/webhook/gowa", "/webhook/espocrm", "/health"]})
+                                    "endpoints": ["/webhook/gowa", "/webhook/espocrm",
+                                                  "/mcp", "/health"]})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -89,6 +102,34 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": False, "error": str(exc)[:200]})
             return self._send(200, result)
 
+        if path == "/mcp":
+            if not self._token_ok():
+                return self._send(401, {"error": "unauthorized"})
+            try:
+                payload = json.loads(raw or b"{}")
+            except json.JSONDecodeError:
+                return self._send(400, {"jsonrpc": "2.0", "id": None,
+                                        "error": {"code": -32700, "message": "Parse error"}})
+            headers = {}
+            if isinstance(payload, dict) and payload.get("method") == "initialize":
+                headers["Mcp-Session-Id"] = new_session_id()
+            if isinstance(payload, list):
+                responses = []
+                for item in payload:
+                    if not isinstance(item, dict):
+                        continue
+                    result = self.mcp.handle(item)
+                    if result is not None:
+                        responses.append(result)
+                return self._send(200, responses, headers)
+            if not isinstance(payload, dict):
+                return self._send(400, {"jsonrpc": "2.0", "id": None,
+                                        "error": {"code": -32600, "message": "Invalid Request"}})
+            result = self.mcp.handle(payload)
+            if result is None:
+                return self._send_no_content(202)
+            return self._send(200, result, headers)
+
         if path == "/webhook/espocrm":
             if not self._token_ok():
                 return self._send(401, {"error": "unauthorized"})
@@ -107,7 +148,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def make_server(cfg: Config, bridge: Bridge) -> ThreadingHTTPServer:
-    handler = type("BoundHandler", (Handler,), {"bridge": bridge})
+    mcp = McpServer(bridge.espo, bridge.gowa, bridge.store, bridge.health)
+    handler = type("BoundHandler", (Handler,), {"bridge": bridge, "mcp": mcp})
     server = ThreadingHTTPServer((cfg.bridge_host, cfg.bridge_port), handler)
     server.daemon_threads = True
     return server

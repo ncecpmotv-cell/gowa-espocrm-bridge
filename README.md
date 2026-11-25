@@ -32,6 +32,10 @@ Android 9 / EMUI 9.1) inside Termux, with no root and no Docker.
 **Durability** — every publish goes through a SQLite outbox with retries and
 backoff, so a logged-out session or a sleeping phone never silently drops a post.
 
+**MCP** — the same process serves a Model Context Protocol endpoint at
+`POST /mcp`, so an AI client can search CRM records, schedule or publish channel
+posts, read a channel, and send WhatsApp messages. See [docs/MCP.md](docs/MCP.md).
+
 ---
 
 ## Verified on the reference device
@@ -202,7 +206,7 @@ SSH tunnel in front.
 ## Repository layout
 
 ```
-bridge/              Python service (config, clients, outbox, HTTP, tests)
+bridge/              Python service (config, clients, outbox, HTTP, MCP, tests)
 espocrm-custom/      Entity metadata, layouts, PHP controller/entity/hook, vhost
 scripts/             install-termux.sh, build-gowa-arm64.sh, runit units, tuning
 docs/                architecture, API, EMUI battery, troubleshooting

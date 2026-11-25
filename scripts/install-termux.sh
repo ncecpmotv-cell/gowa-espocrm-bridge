@@ -34,8 +34,14 @@ pkg install -y git curl unzip php php-fpm php-gd mariadb nginx python termux-ser
 php -m | grep -qx pdo_mysql || { echo "php lacks pdo_mysql" >&2; exit 1; }
 
 step "directories"
-mkdir -p "$BASE"/{bin,etc,var,logs} "$BASE/bridge" "$PREFIX/var/log/sv"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+mkdir -p "$BASE"/{bin,etc,var,logs} "$BASE/bridge/tests" "$PREFIX/var/log/sv"
 mkdir -p "$PREFIX/var/service"
+
+step "bridge source"
+cp -f "$REPO_ROOT"/bridge/*.py "$BASE/bridge/"
+cp -f "$REPO_ROOT"/bridge/tests/*.py "$BASE/bridge/tests/"
+echo "copied bridge source -> $BASE/bridge"
 
 step "runtime config (.env)"
 if [ ! -f "$BASE/.env" ]; then

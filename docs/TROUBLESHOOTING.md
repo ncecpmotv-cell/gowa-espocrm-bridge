@@ -124,6 +124,25 @@ curl -u admin:pass -X POST http://127.0.0.1:8081/api/v1/UserSecurity/apiKey/gene
 EspoCRM requires a non-empty `lastName`. Single-word display names must be sent
 as `lastName` with an empty `firstName` (the bridge does this).
 
+## Access / tunnel
+
+### `Connection timed out during banner exchange` on the reverse-tunnel port
+
+A stale `sshd` child on the *server* still owns the forwarded port: it accepts
+TCP but the far end is gone. Free it (`ss -ltnp | grep 2225`, kill that pid) or
+move the tunnel to a new port — which also needs a matching
+`permitlisten="127.0.0.1:2225"` entry in the server's `authorized_keys`.
+
+### `nohup ssh -N -R … &` shows `Stopped` and an empty log
+
+ssh asked for the host key on the tty and job control suspended it. Use
+`-f -N -T` with `-o BatchMode=yes -o StrictHostKeyChecking=accept-new`.
+
+### Tunnel must not depend on Tailscale
+
+A shared tailnet node can disappear from `tailscale status` and lock you out.
+Point the tunnel at the server's public IP (see `scripts/runit/rtunnel/run`).
+
 ## Termux / runit
 
 ### `sv down gowa` leaves the process running

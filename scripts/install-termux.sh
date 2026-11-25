@@ -13,7 +13,11 @@
 set -euo pipefail
 TERMUX_HOME="${HOME:-/data/data/com.termux/files/home}"
 BASE="$TERMUX_HOME/gowa-espo"
-ESPO_DIR="$TERMUX_HOME/espocrm"
+ESPO_DIR="${ESPO_DIR:-$TERMUX_HOME/espocrm}"
+if [ ! -d "$ESPO_DIR" ] && [ -d "$TERMUX_HOME/sanad/espocrm" ]; then
+  ESPO_DIR="$TERMUX_HOME/sanad/espocrm"
+fi
+export ESPO_DIR
 DB_NAME="espocrm"
 DB_USER="espo"
 SKIP_ESPO=0
@@ -100,7 +104,9 @@ if [ "$SKIP_ESPO" = "0" ]; then
   echo "nginx ready (vhost is installed by setup-espocrm.sh)"
 
   step "EspoCRM source"
-  if [ ! -f "$ESPO_DIR/index.php" ]; then
+  if [ -f "$ESPO_DIR/index.php" ]; then
+    echo "reusing existing EspoCRM at $ESPO_DIR (no second copy)"
+  else
     VER=$(curl -sL https://api.github.com/repos/espocrm/espocrm/releases/latest | sed -n 's/.*"tag_name": *"v\?\([^"]*\)".*/\1/p' | head -1)
     VER="${VER:-10.1.4}"
     echo "downloading EspoCRM $VER"

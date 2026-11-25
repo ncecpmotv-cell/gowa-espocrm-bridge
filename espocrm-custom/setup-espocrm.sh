@@ -4,7 +4,11 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TERMUX_HOME="${HOME:-/data/data/com.termux/files/home}"
-ESPO_DIR="$TERMUX_HOME/espocrm"
+ESPO_DIR="${ESPO_DIR:-$TERMUX_HOME/espocrm}"
+# Reuse an existing EspoCRM instead of installing a second 190 MB copy.
+if [ ! -d "$ESPO_DIR" ] && [ -d "$TERMUX_HOME/sanad/espocrm" ]; then
+  ESPO_DIR="$TERMUX_HOME/sanad/espocrm"
+fi
 BASE="$TERMUX_HOME/gowa-espo"
 PREFIX="${PREFIX:?run inside Termux}"
 step() { printf '\n=== %s ===\n' "$*"; }
@@ -36,7 +40,9 @@ cp "$HERE"/Hooks/WhatsAppChannelPost/*.php "$ESPO_DIR/custom/Espo/Custom/Hooks/W
 chmod -R u+rwX "$ESPO_DIR/custom" "$ESPO_DIR/data"
 
 step "nginx vhost"
-install -Dm644 "$HERE/nginx-espocrm.conf" "$PREFIX/etc/nginx/conf.d/espocrm.conf"
+sed "s|__ESPO_ROOT__|$ESPO_DIR|g" "$HERE/nginx-espocrm.conf" \
+  > "$PREFIX/etc/nginx/conf.d/espocrm.conf"
+chmod 644 "$PREFIX/etc/nginx/conf.d/espocrm.conf"
 nginx -t
 export SVDIR="$PREFIX/var/service"
 sv restart nginx 2>/dev/null || sv up nginx

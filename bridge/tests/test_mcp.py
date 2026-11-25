@@ -174,6 +174,11 @@ class McpHttpTests(unittest.TestCase):
         status, _, _ = self.post({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token=None)
         self.assertEqual(status, 401)
 
+    def test_rejects_wrong_token(self):
+        status, _, _ = self.post({"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                                 token="not-the-token")
+        self.assertEqual(status, 401)
+
     def test_initialize_over_http_returns_session(self):
         status, payload, sid = self.post({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                                           "params": {"protocolVersion": "2025-06-18"}})
@@ -193,10 +198,12 @@ class McpHttpTests(unittest.TestCase):
         self.assertEqual(status, 202)
         self.assertIsNone(payload)
 
-    def test_get_mcp_is_405(self):
+    def test_get_mcp_is_405_with_allow_header(self):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         conn.request("GET", "/mcp")
-        self.assertEqual(conn.getresponse().status, 405)
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 405)
+        self.assertEqual(resp.getheader("Allow"), "POST")
         conn.close()
 
 

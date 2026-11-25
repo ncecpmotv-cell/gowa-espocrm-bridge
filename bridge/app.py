@@ -76,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
                                     "channels": list(self.bridge.cfg.newsletter_jids)})
         if path == "/mcp":
             # Streamable-HTTP servers that do not offer a GET/SSE stream must say so.
-            return self._send(405, {"error": "use POST /mcp"})
+            return self._send(405, {"error": "use POST /mcp"}, {"Allow": "POST"})
         if path == "/":
             return self._send(200, {"service": "gowa-espocrm-bridge",
                                     "endpoints": ["/webhook/gowa", "/webhook/espocrm",

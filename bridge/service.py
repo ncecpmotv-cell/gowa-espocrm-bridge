@@ -84,7 +84,7 @@ class Bridge:
                  gowa: GowaClient | None = None, store: Store | None = None):
         self.cfg = cfg
         self.espo = espo or EspoClient(cfg.espo_base_url, cfg.espo_api_key)
-        self.gowa = gowa or GowaClient(cfg.gowa_base_url)
+        self.gowa = gowa or GowaClient(cfg.gowa_base_url, device_id=cfg.gowa_device_id)
         self.store = store or Store(cfg.db_path)
         self._stop = threading.Event()
         self.stats = {"inbound": 0, "channel_posts": 0, "dms": 0, "published": 0, "errors": 0}

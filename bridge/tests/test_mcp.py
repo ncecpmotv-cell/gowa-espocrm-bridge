@@ -59,7 +59,8 @@ class FakeGowa:
 
 def cfg_for(tmp, token="tok"):
     return Config(
-        gowa_base_url="http://127.0.0.1:3000", gowa_webhook_secret="s",
+        gowa_base_url="http://127.0.0.1:3000", gowa_device_id="primary",
+        gowa_webhook_secret="s",
         bridge_host="127.0.0.1", bridge_port=0, bridge_token=token,
         espo_base_url="http://127.0.0.1:8081", espo_api_key="k", espo_user="wa-bridge",
         newsletter_jids=(), default_country_code="966",

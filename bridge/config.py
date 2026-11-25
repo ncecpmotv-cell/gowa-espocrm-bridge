@@ -31,6 +31,7 @@ def parse_env_file(path: str) -> dict[str, str]:
 @dataclass(frozen=True)
 class Config:
     gowa_base_url: str
+    gowa_device_id: str
     gowa_webhook_secret: str
     bridge_host: str
     bridge_port: int
@@ -67,6 +68,7 @@ class Config:
         )
         cfg = cls(
             gowa_base_url=get("GOWA_BASE_URL", "http://127.0.0.1:3000").rstrip("/"),
+            gowa_device_id=get("GOWA_DEVICE_ID", "primary"),
             gowa_webhook_secret=get("GOWA_WEBHOOK_SECRET"),
             bridge_host=get("BRIDGE_HOST", "127.0.0.1"),
             bridge_port=get_int("BRIDGE_PORT", 8085),
@@ -99,7 +101,7 @@ class Config:
 
 
 _KNOWN_KEYS = {
-    "GOWA_BASE_URL", "GOWA_WEBHOOK_SECRET", "BRIDGE_HOST", "BRIDGE_PORT",
+    "GOWA_BASE_URL", "GOWA_DEVICE_ID", "GOWA_WEBHOOK_SECRET", "BRIDGE_HOST", "BRIDGE_PORT",
     "BRIDGE_TOKEN", "ESPO_BASE_URL", "ESPO_API_KEY", "ESPO_USER",
     "NEWSLETTER_JIDS", "DEFAULT_COUNTRY_CODE", "BRIDGE_DB_PATH",
     "BRIDGE_POLL_INTERVAL", "BRIDGE_CHANNEL_SYNC_INTERVAL", "BRIDGE_LOG_LEVEL",

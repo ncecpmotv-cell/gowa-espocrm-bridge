@@ -120,6 +120,7 @@ class Bridge:
         while not self._stop.is_set():
             try:
                 self.sync_channels()
+                self.sync_counters()
             except Exception:
                 log.exception("channel sync error")
             self._stop.wait(self.cfg.channel_sync_interval)
@@ -325,12 +326,21 @@ class Bridge:
         media_url = (record.get("mediaUrl") or "").strip()
         if media_url:
             text = f"{text}\n{media_url}"
-        self.gowa.send_message(jid, text)
-        self.espo.update_channel_post(post_id, {
+        response = self.gowa.send_message(jid, text)
+        results = response.get("results") if isinstance(response.get("results"), dict) else {}
+        fields = {
             "status": "Published",
             "publishedAt": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             "lastError": None,
-        })
+        }
+        message_id = results.get("message_id") or results.get("id")
+        if message_id:
+            # Needed to map channel counters (views/forwards/reactions) back.
+            fields["messageId"] = message_id
+            # Our own posts also come back through the channel feed; mark them
+            # seen so the backfill does not create a duplicate CRM record.
+            self.store.mark_seen(message_id)
+        self.espo.update_channel_post(post_id, fields)
         self.stats["published"] += 1
         log.info("published %s to %s", post_id, jid)
 
@@ -360,7 +370,7 @@ class Bridge:
                 log.warning("newsletter fetch failed for %s: %s", jid, exc)
                 continue
             results = response.get("results") or {}
-            messages = results.get("messages") if isinstance(results, dict) else results
+            messages = results.get("data") or results.get("messages") or []
             for item in messages or []:
                 normalized = self._normalize_channel_message(item, jid)
                 if not normalized.get("id"):
@@ -386,6 +396,71 @@ class Bridge:
             "server_id": _first(item, "server_id", "serverId"),
             "chat_name": _first(item, "channel_name", "newsletter_name", default=""),
         }
+
+    # -- engagement counters ----------------------------------------------
+    def sync_counters(self) -> int:
+        """Refresh views/forwards/reactions on CRM records from the channel.
+
+        GOWA exposes two shapes: /newsletter/messages carries message_id +
+        views_count (but no reactions), while /newsletter/message-updates
+        carries reaction_counts keyed by server_id. Join them on server_id.
+        """
+        updated = 0
+        for jid in self.cfg.newsletter_jids:
+            try:
+                feed_response = self.gowa.newsletter_messages(jid, count=20)
+            except GowaError as exc:
+                log.warning("counter fetch failed for %s: %s", jid, exc)
+                continue
+            feed = (feed_response.get("results") or {}).get("data") or []
+            server_ids = [i.get("server_id") for i in feed if isinstance(i.get("server_id"), int)]
+            # A wide range (after=1) makes WhatsApp scan everything and time out
+            # with 504; asking only for the ids we just saw is fast.
+            after = max(1, min(server_ids) - 1) if server_ids else 1
+            try:
+                updates_response = self.gowa.newsletter_message_updates(jid, after=after, count=20)
+            except GowaError as exc:
+                log.warning("counter updates failed for %s: %s", jid, exc)
+                updates_response = {}
+            counters = {
+                item.get("server_id"): item
+                for item in ((updates_response.get("results") or {}).get("data") or [])
+            }
+            for item in feed:
+                message_id = item.get("message_id")
+                if not message_id:
+                    continue
+                record = self.espo.find_channel_post_by_message(message_id)
+                if not record:
+                    continue
+                server_id = item.get("server_id")
+                counter = counters.get(server_id) or item
+                fields = {}
+                if server_id and record.get("serverId") != server_id:
+                    fields["serverId"] = server_id
+                for field, key in (("viewsCount", "views_count"),
+                                   ("forwardsCount", "forwards_count")):
+                    value = counter.get(key, item.get(key))
+                    if isinstance(value, (int, float)) and int(value) != int(record.get(field) or 0):
+                        fields[field] = int(value)
+                reactions = counter.get("reaction_counts", item.get("reactions"))
+                total = None
+                if isinstance(reactions, dict):
+                    total = sum(v for v in reactions.values() if isinstance(v, (int, float)))
+                elif isinstance(reactions, list):
+                    total = len(reactions)
+                elif isinstance(reactions, (int, float)):
+                    total = int(reactions)
+                if total is not None and total != int(record.get("reactionsCount") or 0):
+                    fields["reactionsCount"] = int(total)
+                if fields:
+                    try:
+                        self.espo.update_channel_post(record["id"], fields)
+                        updated += 1
+                        log.info("counters updated for %s: %s", message_id, fields)
+                    except EspoError as exc:
+                        log.warning("counter update failed for %s: %s", message_id, exc)
+        return updated
 
     # -- diagnostics -------------------------------------------------------
     def health(self) -> dict:

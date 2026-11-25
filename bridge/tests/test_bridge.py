@@ -71,14 +71,17 @@ class FakeGowa:
             self.fail_times -= 1
             raise GowaError(500, "temporary failure", "/send/message")
         self.sent.append((phone, message))
-        return {"code": "SUCCESS"}
+        return {"code": "SUCCESS", "results": {"message_id": "3EB0TEST" + str(len(self.sent))}}
 
     def subscribe_live_updates(self, jid):
         self.subscribed.append(jid)
         return {"code": "SUCCESS"}
 
     def newsletter_messages(self, jid, count=20):
-        return {"results": {"messages": []}}
+        return {"results": {"data": []}}
+
+    def newsletter_message_updates(self, jid, after=1, count=100):
+        return {"results": {"data": []}}
 
     def device_status(self):
         return {"code": "SUCCESS"}
@@ -308,3 +311,45 @@ class ContactPayloadTests(unittest.TestCase):
         client.create_contact("+966500000000", first_name="أحمد علي")
         self.assertTrue(client.payload["lastName"])
         self.assertEqual(client.payload["firstName"], "أحمد")
+
+
+class CounterSyncTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        cfg = cfg_for(self.tmp.name)
+        self.cfg = Config(**{**cfg.__dict__, "newsletter_jids": ("1203630@newsletter",)})
+        self.espo, self.gowa = FakeEspo(), FakeGowa()
+        self.bridge = Bridge(self.cfg, espo=self.espo, gowa=self.gowa)
+        self.post = self.espo.create_channel_post({
+            "name": "x", "channelJid": "1203630@newsletter",
+            "messageId": "CH1", "status": "New"})
+
+    def tearDown(self):
+        self.bridge.store.close()
+        self.tmp.cleanup()
+
+    def test_counters_written_to_record(self):
+        self.gowa.newsletter_messages = lambda jid, count=20: {"results": {"data": [
+            {"message_id": "CH1", "server_id": 7, "views_count": 42, "forwards_count": 3}]}}
+        self.gowa.newsletter_message_updates = lambda jid, after=1, count=100: {"results": {"data": [
+            {"server_id": 7, "views_count": 42, "forwards_count": 3,
+             "reaction_counts": {"👍": 2, "❤️": 1}}]}}
+        updated = self.bridge.sync_counters()
+        self.assertEqual(updated, 1)
+        rec = self.espo.posts[self.post["id"]]
+        self.assertEqual(rec["viewsCount"], 42)
+        self.assertEqual(rec["forwardsCount"], 3)
+        self.assertEqual(rec["reactionsCount"], 3)
+
+    def test_unknown_message_is_ignored(self):
+        self.gowa.newsletter_messages = lambda jid, count=20: {"results": {"data": [
+            {"message_id": "NOPE", "server_id": 9, "views_count": 9}]}}
+        self.assertEqual(self.bridge.sync_counters(), 0)
+
+    def test_publish_records_message_id(self):
+        self.espo.update_channel_post(self.post["id"], {"status": "Ready to Publish"})
+        self.bridge.handle_espocrm_hook({"entityType": "WhatsAppChannelPost",
+                                         "entityId": self.post["id"]})
+        rec = self.espo.posts[self.post["id"]]
+        self.assertEqual(rec["status"], "Published")
+        self.assertTrue(rec.get("messageId"))

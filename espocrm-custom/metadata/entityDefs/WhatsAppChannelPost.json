@@ -20,8 +20,7 @@
       "maxLength": 128
     },
     "serverId": {
-      "type": "int",
-      "readOnly": true
+      "type": "int"
     },
     "body": {
       "type": "text"
@@ -47,18 +46,15 @@
     },
     "viewsCount": {
       "type": "int",
-      "default": 0,
-      "readOnly": true
+      "default": 0
     },
     "forwardsCount": {
       "type": "int",
-      "default": 0,
-      "readOnly": true
+      "default": 0
     },
     "reactionsCount": {
       "type": "int",
-      "default": 0,
-      "readOnly": true
+      "default": 0
     },
     "status": {
       "type": "enum",

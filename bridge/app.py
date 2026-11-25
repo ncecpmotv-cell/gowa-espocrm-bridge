@@ -130,6 +130,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_no_content(202)
             return self._send(200, result, headers)
 
+        if path == "/admin/sync":
+            if not self._token_ok():
+                return self._send(401, {"error": "unauthorized"})
+            try:
+                channels = self.bridge.sync_channels()
+                counters = self.bridge.sync_counters()
+            except Exception as exc:  # noqa: BLE001
+                log.exception("manual sync failed")
+                return self._send(500, {"ok": False, "error": str(exc)[:200]})
+            return self._send(200, {"ok": True, "newPosts": channels, "updatedCounters": counters})
+
         if path == "/webhook/espocrm":
             if not self._token_ok():
                 return self._send(401, {"error": "unauthorized"})

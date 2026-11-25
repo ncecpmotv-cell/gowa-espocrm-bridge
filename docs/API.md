@@ -33,6 +33,17 @@ curl -s -X POST http://127.0.0.1:8085/webhook/gowa \
   -H 'Content-Type: application/json' -H "X-Hub-Signature-256: $SIG" -d "$BODY"
 ```
 
+### `POST /admin/sync`
+
+Force a channel backfill + counter refresh now (normally runs on the
+`BRIDGE_CHANNEL_SYNC_INTERVAL` tick). Bearer-token authenticated.
+
+```bash
+TOKEN=$(grep '^BRIDGE_TOKEN=' ~/gowa-espo/.env | cut -d= -f2-)
+curl -s -X POST http://127.0.0.1:8085/admin/sync -H "Authorization: Bearer $TOKEN"
+# {"ok": true, "newPosts": 0, "updatedCounters": 3}
+```
+
 ### `POST /webhook/espocrm`
 
 Called by the EspoCRM hook or by hand. Requires `X-Bridge-Token`

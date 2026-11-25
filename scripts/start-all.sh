@@ -7,7 +7,7 @@ termux-wake-lock
 sh "$HOME/.termux/boot/00-server.sh"
 sleep 3
 export SVDIR="${SVDIR:-$PREFIX/var/service}"
-sv status mariadb php-fpm nginx gowa bridge 2>/dev/null \
+sv status mariadb php-fpm nginx gowa bridge ngrok 2>/dev/null \
   | sed 's|/data/data/com.termux/files/usr/var/service/||'
 echo "--- health ---"
 curl -s --max-time 10 http://127.0.0.1:8085/health

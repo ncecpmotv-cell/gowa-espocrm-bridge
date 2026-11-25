@@ -8,7 +8,11 @@
 # databases, the git repo, or any EspoCRM application file.
 set -uo pipefail
 APPLY=0
-[ "${1:-}" = "--apply" ] && APPLY=1
+AGGRESSIVE=0
+for arg in "$@"; do
+  [ "$arg" = "--apply" ] && APPLY=1
+  [ "$arg" = "--aggressive" ] && AGGRESSIVE=1
+done
 H="${HOME:-/data/data/com.termux/files/home}"
 P="${PREFIX:-/data/data/com.termux/files/usr}"
 
@@ -81,7 +85,8 @@ add_candidate "$H/note_test.py" "scratch script" file
 add_candidate "$H/qr.png" "stale QR image" file
 add_candidate "$H/gowa-espo/qr.png" "stale QR image" file
 add_candidate "$H/gowa-espo/qr.json" "stale QR json" file
-add_candidate "$H/t" "unknown scratch directory" dir
+add_candidate "$H/t" "legacy experiment binaries (memos/pocketbase/dufs)" dir
+add_candidate "$H/hermes-agent" "unused Hermes source checkout (re-clonable)" dir
 add_candidate "$P/var/service/mysqld" "retired duplicate MariaDB unit" dir
 add_candidate "$P/var/log/sv/mysqld" "retired MariaDB unit logs" dir
 
@@ -90,7 +95,8 @@ find "$P/var/log/sv" -type f \( -name '@*' -o -name '*.s' \) -printf '%s\t%p\n' 
 
 if [ "$APPLY" -eq 0 ]; then
   say "DRY RUN — nothing deleted"
-  echo "Re-run with --apply to remove only the items listed above."
+  echo "Re-run with --apply to remove the safe set."
+  echo "Add --aggressive to also remove the large legacy directories (t/, hermes-agent/)."
   exit 0
 fi
 
@@ -109,7 +115,13 @@ print(f"removed {n} __pycache__ dirs")
 PY
     ;;
     file) rm -f "$path" && echo "removed $path" ;;
-    dir)  rm -rf "$path" && echo "removed $path" ;;
+    dir)
+      if [ "$AGGRESSIVE" -eq 1 ]; then
+        rm -rf "$path" && echo "removed $path"
+      else
+        echo "SKIPPED (needs --aggressive): $path"
+      fi
+      ;;
   esac
 done
 

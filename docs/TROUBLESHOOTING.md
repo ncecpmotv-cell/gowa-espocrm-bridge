@@ -147,6 +147,20 @@ php bin/command config:set defaultPermissions.user "$(id -un)"
 php bin/command config:set defaultPermissions.group "$(id -gn)"
 ```
 
+### MariaDB crash-loops with `Unable to lock ./ibdata1 error: 11`
+
+Two service units own the same datadir. Termux snapshots often leave both a
+legacy `mysqld` unit and a `mariadb` unit; the older process holds the InnoDB
+lock and the newer one restarts every second. Keep exactly one:
+
+```bash
+touch $PREFIX/var/service/mysqld/down     # never autostart it again
+sv down mysqld
+kill -9 <legacy mysqld pid>
+sv up mariadb
+mariadb -u root -e "show global status like 'Uptime';"   # must be small
+```
+
 ### Port 8080 already answers
 
 That is nginx's stock default vhost (`listen 8080` in `nginx.conf`). EspoCRM is
